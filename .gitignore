@@ -36,6 +36,15 @@ yarn-error.log*
 # vercel
 .vercel
 
+# claude code
+.claude/
+
+# jupyter checkpoints
+.ipynb_checkpoints/
+
+# database
+/data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

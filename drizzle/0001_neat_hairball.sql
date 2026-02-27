@@ -1,0 +1,1 @@
+ALTER TABLE `saved_configs` ADD `provider` text DEFAULT 'openai' NOT NULL;
