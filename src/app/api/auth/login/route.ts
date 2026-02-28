@@ -19,14 +19,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "邮箱或密码错误" }, { status: 401 });
   }
 
+  // OAuth 用户没有密码，不能通过邮箱密码登录
+  if (!user.passwordHash) {
+    return NextResponse.json(
+      { error: "该账号使用第三方登录，请使用 GitHub 或 LinuxDo 登录" },
+      { status: 401 }
+    );
+  }
+
   const valid = await compare(password, user.passwordHash);
   if (!valid) {
     return NextResponse.json({ error: "邮箱或密码错误" }, { status: 401 });
   }
 
-  const token = await signToken(user.id, user.email);
+  // 邮箱注册用户必定有 email，使用非空断言
+  const token = await signToken(user.id, user.email!);
   const res = NextResponse.json({
-    user: { id: user.id, email: user.email },
+    user: { id: user.id, email: user.email! },
   });
   res.cookies.set(createTokenCookie(token));
   return res;

@@ -29,6 +29,13 @@ export async function POST(req: NextRequest) {
   // 检查邮箱是否已注册
   const existing = db.select().from(users).where(eq(users.email, email)).get();
   if (existing) {
+    // 如果是 OAuth 用户（没有密码），提示使用 OAuth 登录
+    if (!existing.passwordHash) {
+      return NextResponse.json(
+        { error: "该邮箱已通过第三方登录注册，请使用 GitHub 或 LinuxDo 登录" },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: "该邮箱已注册" }, { status: 409 });
   }
 
@@ -41,9 +48,10 @@ export async function POST(req: NextRequest) {
     .get();
 
   // 签发 JWT
-  const token = await signToken(result.id, result.email);
+  // 邮箱注册用户必定有 email，使用非空断言
+  const token = await signToken(result.id, result.email!);
   const res = NextResponse.json({
-    user: { id: result.id, email: result.email },
+    user: { id: result.id, email: result.email! },
   });
   res.cookies.set(createTokenCookie(token));
   return res;

@@ -12,6 +12,9 @@ import {
 interface User {
   userId: number;
   email: string;
+  avatarUrl?: string | null;
+  username?: string | null;
+  oauthProvider?: string | null;
 }
 
 interface AuthContextType {
@@ -45,7 +48,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const data = await res.json();
     if (!res.ok) return data.error as string;
-    setUser({ userId: data.user.id, email: data.user.email });
+    setUser({
+      userId: data.user.id,
+      email: data.user.email,
+      avatarUrl: data.user.avatarUrl,
+      username: data.user.username,
+      oauthProvider: data.user.oauthProvider,
+    });
     return null;
   }, []);
 
@@ -57,7 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const data = await res.json();
     if (!res.ok) return data.error as string;
-    setUser({ userId: data.user.id, email: data.user.email });
+    setUser({
+      userId: data.user.id,
+      email: data.user.email,
+      avatarUrl: data.user.avatarUrl,
+      username: data.user.username,
+      oauthProvider: data.user.oauthProvider,
+    });
     return null;
   }, []);
 

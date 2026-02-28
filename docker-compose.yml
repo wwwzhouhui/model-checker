@@ -1,0 +1,37 @@
+services:
+  model-checker:
+    image: wwwzhouhui569/model-checker:latest
+    container_name: model-checker
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # JWT 和加密密钥（必须修改）
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-to-a-random-64-character-string}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-please-change-this-to-a-64-character-hex-string}
+
+      # OAuth 配置（可选）
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - LINUXDO_CLIENT_ID=${LINUXDO_CLIENT_ID:-}
+      - LINUXDO_CLIENT_SECRET=${LINUXDO_CLIENT_SECRET:-}
+      - OAUTH_CALLBACK_URL=${OAUTH_CALLBACK_URL:-http://localhost:3000}
+
+      # Node 环境
+      - NODE_ENV=production
+      - PORT=3000
+    volumes:
+      # 持久化 SQLite 数据库
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - model-checker-network
+
+networks:
+  model-checker-network:
+    driver: bridge

@@ -243,6 +243,39 @@ function HomeInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------- OAuth 错误处理 ----------
+
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError) {
+      // 解析错误信息（格式可能为 error_code:error_description）
+      const [errorCode, errorDesc] = urlError.split(":");
+
+      let friendlyError = "登录失败，请重试";
+
+      if (errorCode === "timeout") {
+        friendlyError = "GitHub 连接超时，可能是网络问题。建议：1) 使用 VPN 2) 使用 LinuxDo 登录";
+      } else if (errorCode === "network_error") {
+        friendlyError = "无法连接到 GitHub，建议使用 LinuxDo 登录或稍后重试";
+      } else if (errorDesc) {
+        friendlyError = decodeURIComponent(errorDesc);
+      }
+
+      setError(friendlyError);
+
+      // 清除 URL 中的错误参数
+      window.history.replaceState({}, "", "/");
+
+      // 打开登录弹窗方便重试
+      setTimeout(() => {
+        document.querySelector('button[class*="btn-accent"]')?.dispatchEvent(
+          new MouseEvent("click", { bubbles: true })
+        );
+      }, 500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ---------- 功能 B：从已保存配置快速选择 ----------
 
   const handleSelectSavedConfig = useCallback(

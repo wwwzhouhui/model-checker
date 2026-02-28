@@ -437,6 +437,75 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* 用户信息卡片 */}
+      {user && (
+        <div className="glass-card p-4 animate-fade-in">
+          <div className="flex items-center gap-3">
+            {/* 头像 */}
+            {user.avatarUrl ? (
+              <img
+                src={user.avatarUrl}
+                alt="Avatar"
+                className="w-10 h-10 rounded-full object-cover"
+                style={{ border: "1px solid var(--border)" }}
+              />
+          ) : (
+            <span
+              className="inline-flex items-center justify-center w-10 h-10 rounded-full text-sm font-bold"
+              style={{
+                background: "var(--accent-muted)",
+                color: "var(--accent)",
+                border: "1px solid rgba(6, 182, 212, 0.3)",
+              }}
+            >
+              {user.email?.charAt(0).toUpperCase() ?? "?"}
+            </span>
+          )}
+          {/* 用户信息 */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span
+                className="font-medium text-sm truncate"
+                style={{ color: "var(--text-primary)" }}
+                title={user.email || user.username || undefined}
+              >
+                {user.username || user.email}
+              </span>
+              {/* 账号来源标签 */}
+              <span
+                className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0"
+                style={{
+                  background: user.oauthProvider
+                    ? user.oauthProvider === "github"
+                      ? "#24292e"
+                      : "#0a0a0a"
+                    : "var(--bg-tertiary)",
+                  color: user.oauthProvider ? "#fff" : "var(--text-muted)",
+                  border: user.oauthProvider
+                    ? user.oauthProvider === "github"
+                      ? "1px solid #30363d"
+                      : "1px solid #333"
+                    : "1px solid var(--border)",
+                }}
+              >
+                {user.oauthProvider === "github"
+                  ? "GitHub"
+                  : user.oauthProvider === "linuxdo"
+                    ? "LinuxDo"
+                    : "邮箱注册"}
+              </span>
+            </div>
+            <p
+              className="text-xs mt-0.5 truncate"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {user.email || "未设置邮箱"}
+            </p>
+          </div>
+        </div>
+      </div>
+      )}
+
       {/* 错误提示 */}
       {error && (
         <div

@@ -15,6 +15,13 @@
       "when": 1772201481072,
       "tag": "0001_neat_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1772248233322,
+      "tag": "0002_new_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

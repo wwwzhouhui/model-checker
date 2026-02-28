@@ -101,22 +101,47 @@ export default function Navbar() {
               <div className="flex items-center gap-3">
                 {/* User badge */}
                 <div className="flex items-center gap-2">
+                  {/* Avatar or fallback */}
+                  {user.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt="Avatar"
+                      className="w-7 h-7 rounded-full object-cover"
+                      style={{ border: "1px solid var(--border)" }}
+                    />
+                  ) : (
+                    <span
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold"
+                      style={{
+                        background: "var(--accent-muted)",
+                        color: "var(--accent)",
+                        border: "1px solid rgba(6, 182, 212, 0.3)",
+                      }}
+                    >
+                      {user.email?.charAt(0).toUpperCase() ?? "?"}
+                    </span>
+                  )}
+                  {/* Display name or email */}
                   <span
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold"
-                    style={{
-                      background: "var(--accent-muted)",
-                      color: "var(--accent)",
-                      border: "1px solid rgba(6, 182, 212, 0.3)",
-                    }}
-                  >
-                    {initial}
-                  </span>
-                  <span
-                    className="text-sm hidden sm:inline"
+                    className="text-sm hidden sm:inline max-w-[120px] truncate"
                     style={{ color: "var(--text-secondary)" }}
+                    title={user.email || user.username || undefined}
                   >
-                    {user.email}
+                    {user.username || user.email}
                   </span>
+                  {/* OAuth provider badge */}
+                  {user.oauthProvider && (
+                    <span
+                      className="text-xs px-1.5 py-0.5 rounded"
+                      style={{
+                        background: "var(--bg-tertiary)",
+                        color: "var(--text-muted)",
+                        fontSize: "10px",
+                      }}
+                    >
+                      {user.oauthProvider === "github" ? "GitHub" : "LinuxDo"}
+                    </span>
+                  )}
                 </div>
                 {/* Logout */}
                 <button
