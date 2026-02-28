@@ -18,6 +18,7 @@ function isVercelEnv(): boolean {
 
 /**
  * 获取数据库连接（支持 Vercel Postgres 和 本地 SQLite）
+ * 注：Postgres 建表由 src/instrumentation.ts 在服务启动时完成
  */
 export function getDb() {
   if (_db) return _db;
