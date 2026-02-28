@@ -451,3 +451,148 @@ interface NormalizedModel {
 | 移动端响应式 | 中 | 测试所有断点，暗色主题在移动端效果好 |
 | 功能回退 | 高 | 仅改 className/样式，不触碰状态/逻辑 |
 | 浏览器兼容性 | 低 | Tailwind 处理前缀，CSS vars 广泛支持 |
+
+---
+
+## V5 新增调研：GitHub + LinuxDo OAuth 授权登录
+
+### 需求背景
+
+当前项目使用邮箱+密码注册登录，新增 GitHub 和 LinuxDo（Linux.do 社区）第三方 OAuth 授权登录方式，提升用户体验。
+
+### OAuth 2.0 标准流程
+
+```
+┌─────────┐                    ┌──────────┐                   ┌─────────┐
+│  用户   │                    │  应用    │                   │ OAuth   │
+└────┬────┘                    └────┬─────┘                   └────┬────┘
+     │                              │                              │
+     │ 1. 点击"GitHub登录"            │                              │
+     ├─────────────────────────────>│                              │
+     │                              │ 2. 重定向到 GitHub 授权页      │
+     │                              ├─────────────────────────────>│
+     │ 3. 用户授权                   │                              │
+     │<─────────────────────────────┼─────────────────────────────│
+     │                              │ 4. 回调 /api/auth/callback?code=xxx&state=xxx
+     │                              │<─────────────────────────────│
+     │                              │ 5. 用 code 换取 access_token  │
+     │                              ├─────────────────────────────>│
+     │                              │ 6. 返回 access_token         │
+     │                              │<─────────────────────────────│
+     │                              │ 7. 用 token 获取用户信息      │
+     │                              ├─────────────────────────────>│
+     │                              │ 8. 返回用户信息               │
+     │                              │<─────────────────────────────│
+     │                              │ 9. 创建/更新用户，生成 JWT    │
+     │ 10. 设置 Cookie，跳转首页      │                              │
+     │<─────────────────────────────┼─────────────────────────────│
+```
+
+### GitHub OAuth 配置
+
+#### 申请 OAuth App
+1. 访问 https://github.com/settings/developers
+2. 点击 "New OAuth App"
+3. 填写信息：
+   - Application name: `Model Checker`
+   - Homepage URL: `http://localhost:3000` (开发) / 生产域名
+   - Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+
+#### GitHub OAuth 端点
+
+| 端点 | URL | 说明 |
+|------|-----|------|
+| 授权页 | `https://github.com/login/oauth/authorize` | 用户授权 |
+| 获取 token | `https://github.com/login/oauth/access_token` | 用 code 换 token |
+| 用户信息 | `https://api.github.com/user` | 获取当前用户 |
+| 用户邮箱 | `https://api.github.com/user/emails` | 获取用户邮箱 |
+
+### LinuxDo OAuth 配置
+
+#### LinuxDo 是基于 Discourse 的社区，使用 Discourse OAuth
+
+#### Discourse OAuth 端点
+
+| 端点 | URL | 说明 |
+|------|-----|------|
+| 授权页 | `https://connect.linux.do/oauth2/authorize` | 用户授权 |
+| 获取 token | `https://connect.linux.do/oauth2/token` | 用 code 换 token |
+| 用户信息 | `https://connect.linux.do/api/user` | 获取当前用户 |
+
+#### LinuxDo OAuth 特殊之处
+- 基于 Discourse OAuth2 实现
+- 用户信息返回格式与标准 OAuth 略有不同
+- 需要处理 Discourse 的 `external_id` 和 `username` 字段
+
+### 数据库 Schema 更新
+
+需要在 `users` 表增加 OAuth 相关字段：
+
+```sql
+-- 新增字段
+ALTER TABLE users ADD COLUMN oauth_provider TEXT;  -- 'github' | 'linuxdo' | null(邮箱注册)
+ALTER TABLE users ADD COLUMN oauth_id TEXT;        -- OAuth 平台的用户 ID
+ALTER TABLE users ADD COLUMN avatar_url TEXT;      -- 用户头像 URL
+ALTER TABLE users ADD COLUMN username TEXT;        -- OAuth 用户名（可选）
+ALTER TABLE users ADD COLUMN UNIQUE(oauth_provider, oauth_id);  -- 联合唯一索引
+```
+
+### 技术方案
+
+#### 后端实现
+
+| 文件 | 新增内容 |
+|------|---------|
+| `src/app/api/auth/oauth/github/route.ts` | GitHub OAuth 入口，重定向到 GitHub |
+| `src/app/api/auth/oauth/linuxdo/route.ts` | LinuxDo OAuth 入口，重定向到 LinuxDo |
+| `src/app/api/auth/callback/github/route.ts` | GitHub OAuth 回调处理 |
+| `src/app/api/auth/callback/linuxdo/route.ts` | LinuxDo OAuth 回调处理 |
+| `src/lib/oauth/github.ts` | GitHub OAuth 工具函数 |
+| `src/lib/oauth/linuxdo.ts` | LinuxDo OAuth 工具函数 |
+
+#### 前端实现
+
+| 文件 | 新增内容 |
+|------|---------|
+| `src/components/AuthModal.tsx` | 新增"GitHub 登录"和"LinuxDo 登录"按钮 |
+| `src/lib/db/schema.ts` | users 表新增 OAuth 字段 |
+
+### 环境变量配置
+
+```bash
+# .env.local
+# GitHub OAuth
+GITHUB_CLIENT_ID=gh_xxx
+GITHUB_CLIENT_SECRET=gh_xxx
+
+# LinuxDo OAuth
+LINUXDO_CLIENT_ID=xxx
+LINUXDO_CLIENT_SECRET=xxx
+
+# OAuth 回调地址（可选，默认当前域名）
+OAUTH_CALLBACK_URL=http://localhost:3000
+```
+
+### 用户绑定逻辑
+
+1. **首次 OAuth 登录**：创建新用户，`oauth_provider` 和 `oauth_id` 关联
+2. **再次 OAuth 登录**：通过 `oauth_provider + oauth_id` 查找现有用户
+3. **邮箱注册用户**：可通过设置页面绑定 OAuth 账号（待 V5.2 实现）
+4. **同一 OAuth 多账号**：同一 GitHub 账号只能绑定一个用户
+
+### 安全考虑
+
+| 安全项 | 措施 |
+|--------|------|
+| state 参数 | 生成随机 state 防止 CSRF 攻击 |
+| PKCE | 可选，使用 code_verifier/code_challenge 增强 |
+| token 安全 | access_token 不存储，仅用于一次性获取用户信息 |
+| 回调验证 | 验证 state 参数匹配 |
+| HTTPS | 生产环境强制 HTTPS |
+
+### 依赖评估
+
+无需新增依赖，使用 Node.js 原生 `fetch` 和 `crypto`：
+- GitHub API 标准 OAuth2，无需额外 SDK
+- LinuxDo 基于 Discourse，同样标准 OAuth2
+- Next.js API Route 原生支持

@@ -217,3 +217,183 @@ Phase 11-17 全部完成，多厂商模型接口支持（OpenAI + Anthropic + Ge
 
 ### V4 完成总结
 Phase 18-24 全部完成。10 个前端文件从白色 Tailwind 模板重设计为「Terminal Monitor」暗色监控仪表盘风格。
+
+---
+
+## Session 7 — 2026-02-28 (V5 规划：GitHub + LinuxDo OAuth 授权登录)
+
+### 参考代码分析
+
+阅读了两个 Python 参考文件（`sign_in_with_github.py` 和 `sign_in_with_linuxdo.py`），了解了 OAuth 登录流程：
+
+**GitHub OAuth 流程**（参考代码）：
+1. 访问授权 URL：`https://github.com/login/oauth/authorize?response_type=code&client_id={client_id}&state={state}&scope=user:email`
+2. 用户填写用户名密码登录（或使用缓存会话）
+3. 处理 2FA（可选）
+4. 点击授权按钮
+5. 等待回调到应用（获取 code）
+6. 从 localStorage 获取用户信息
+
+**与 Next.js 实现的区别**：
+- 参考代码使用浏览器自动化（Camoufox）模拟登录
+- Next.js 应用使用标准 OAuth 2.0 服务端流程
+- 用户在 GitHub/LinuxDo 页面完成授权，回调到后端 API
+
+### 已完成
+- [x] 阅读 GitHub OAuth 参考代码
+- [x] 阅读 LinuxDo OAuth 参考代码
+- [x] 调研 GitHub OAuth App 申请流程
+- [x] 调研 LinuxDo/Discourse OAuth 流程
+- [x] 设计数据库 Schema 扩展方案（oauth_provider, oauth_id, avatar_url, username）
+- [x] 规划后端 API 路由结构（/api/auth/oauth/{provider}, /api/auth/callback/{provider}）
+- [x] 规划前端集成方案（AuthModal 新增 OAuth 按钮）
+- [x] 更新 findings.md（新增 V5 调研章节）
+- [x] 更新 task_plan.md（新增 Phase 25-30 任务计划）
+- [x] 更新 progress.md（本文件）
+
+### V5 关键决策
+1. **标准 OAuth 2.0 流程** — 不使用浏览器自动化，使用标准服务端 OAuth
+2. **state 参数** — 生成随机 state 存储到 Cookie，防止 CSRF 攻击
+3. **用户识别** — oauth_provider + oauth_id 联合唯一
+4. **头像显示** - 优先显示 OAuth 提供的 avatar_url，fallback 首字母
+5. **零新增依赖** — 使用原生 fetch 和 crypto
+
+### 已完成进度
+- [x] **Phase 25: 数据库 Schema 扩展** ✓
+  - 更新 `src/lib/db/schema.ts`：添加 OAuth 字段（oauth_provider, oauth_id, avatar_url, username）
+  - email 和 password_hash 改为可空（OAuth 用户不需要）
+  - 添加联合唯一索引 (oauth_provider, oauth_id)
+  - 生成 migration 并成功推送到数据库
+  - 修复 login/register 路由的类型错误
+  - 构建验证通过
+- [x] **Phase 26: OAuth 工具库** ✓
+  - 创建 `src/lib/oauth/types.ts`：OAuth 类型定义
+  - 创建 `src/lib/oauth/github.ts`：GitHub OAuth 工具函数
+  - 创建 `src/lib/oauth/linuxdo.ts`：LinuxDo OAuth 工具函数
+  - 创建 `src/lib/oauth/index.ts`：统一导出
+  - 实现函数：getAuthorizeUrl, exchangeCodeForToken, getUserInfo, normalizeUser, generateOAuthState, verifyOAuthState
+  - 构建验证通过
+- [x] **Phase 27: OAuth API 路由** ✓
+  - 创建 `/api/auth/oauth/github/route.ts` — GitHub OAuth 入口（重定向到 GitHub）
+  - 创建 `/api/auth/oauth/linuxdo/route.ts` — LinuxDo OAuth 入口（重定向到 LinuxDo）
+  - 创建 `/api/auth/callback/github/route.ts` — GitHub 回调处理（完整用户创建/查找流程）
+  - 创建 `/api/auth/callback/linuxdo/route.ts` — LinuxDo 回调处理（完整用户创建/查找流程）
+  - 修复 Drizzle ORM 链式 where 问题（使用 and() 组合条件）
+  - 构建验证通过（新增 4 个 API 路由，共 18 个路由）
+
+### 待开始
+- [x] Phase 28: 前端集成 ✓
+- [x] Phase 29: 环境变量与配置 ✓
+- [x] Phase 30: 测试与验证 ✓
+
+### Phase 28 完成内容
+- [x] 更新 `src/components/AuthModal.tsx`：添加 GitHub/LinuxDo OAuth 登录按钮
+- [x] 更新 `src/components/AuthContext.tsx`：扩展 User 接口（avatarUrl, username, oauthProvider）
+- [x] 更新 `src/app/api/auth/me/route.ts`：返回完整用户信息（OAuth 字段）
+- [x] 更新 `src/components/Navbar.tsx`：显示用户头像、用户名、OAuth 厂商标签
+- [x] 更新 `src/app/dashboard/page.tsx`：添加用户信息卡片，显示账号来源
+
+### Phase 29 完成内容
+- [x] 创建 `.env.local.example`：包含所有 OAuth 环境变量说明
+- [x] 更新 README.md：添加 GitHub/LinuxDo OAuth 申请步骤指南
+
+### Phase 30 完成内容
+- [x] 构建验证通过（18 个 API 路由 + 4 个静态页面）
+- [x] 代码逻辑检查完成
+- [ ] 真实 OAuth 流程测试（需要用户配置 Client ID/Secret 后自行测试）
+
+### 构建验证结果
+```
+✓ Compiled successfully in 9.8s
+✓ Generating static pages (18/18) in 17.9s
+
+新增 OAuth 路由:
+├ ƒ /api/auth/callback/github      # GitHub OAuth 回调
+├ ƒ /api/auth/callback/linuxdo     # LinuxDo OAuth 回调
+├ ƒ /api/auth/oauth/github         # GitHub OAuth 入口
+└ ƒ /api/auth/oauth/linuxdo        # LinuxDo OAuth 入口
+```
+
+### V5 完成总结
+
+**Phase 25-30 全部完成** — GitHub + LinuxDo OAuth 授权登录功能已实现。
+
+#### 新增功能
+1. **OAuth 登录** — 支持使用 GitHub 或 LinuxDo 账号一键登录
+2. **用户头像** — 显示 OAuth 提供的头像，或首字母 fallback
+3. **账号来源标签** — 显示账号来源（邮箱注册 / GitHub / LinuxDo）
+4. **双认证共存** — 邮箱密码登录与 OAuth 登录无缝切换
+
+#### 修改文件（共 15 个）
+**数据库**:
+- `src/lib/db/schema.ts` — 添加 OAuth 字段
+
+**OAuth 工具库**:
+- `src/lib/oauth/types.ts` — OAuth 类型定义
+- `src/lib/oauth/github.ts` — GitHub OAuth 工具
+- `src/lib/oauth/linuxdo.ts` — LinuxDo OAuth 工具
+- `src/lib/oauth/index.ts` — 统一导出
+
+**API 路由**:
+- `src/app/api/auth/oauth/github/route.ts` — GitHub OAuth 入口
+- `src/app/api/auth/oauth/linuxdo/route.ts` — LinuxDo OAuth 入口
+- `src/app/api/auth/callback/github/route.ts` — GitHub 回调处理
+- `src/app/api/auth/callback/linuxdo/route.ts` — LinuxDo 回调处理
+- `src/app/api/auth/login/route.ts` — 支持 OAuth 用户检测
+- `src/app/api/auth/register/route.ts` — 支持 OAuth 用户检测
+- `src/app/api/auth/me/route.ts` — 返回 OAuth 字段
+
+**前端组件**:
+- `src/components/AuthContext.tsx` — 扩展 User 接口
+- `src/components/AuthModal.tsx` — OAuth 登录按钮
+- `src/components/Navbar.tsx` — 显示用户头像和厂商标签
+- `src/app/dashboard/page.tsx` — 用户信息卡片
+
+**配置文档**:
+- `.env.local.example` — 环境变量模板
+- `README.md` — OAuth 申请指南
+
+#### 待用户测试项
+由于需要真实的 OAuth 应用凭据，以下测试需要用户自行完成：
+1. GitHub OAuth 完整流程（授权 → 回调 → 登录）
+2. LinuxDo OAuth 完整流程
+3. OAuth 用户与邮箱用户共存场景
+4. 授权拒绝、过期 state 等边缘情况
+
+### 风险与应对
+
+| 风险 | 应对 |
+|------|------|
+| LinuxDo OAuth 文档不全 | 基于标准 Discourse OAuth2 实现 |
+| OAuth 回调地址配置 | 环境变量 OAUTH_CALLBACK_URL 支持配置 |
+| 跨域问题 | OAuth 标准回调，后端处理无跨域 |
+| State 安全 | 使用 HttpOnly Cookie + 加密随机值 |
+
+---
+
+## Session 8 — 2026-02-28 (Docker 部署配置)
+
+### 已完成
+- [x] 创建 Dockerfile（多阶段构建，standalone 输出）
+- [x] 更新 next.config.ts（启用 output: "standalone"）
+- [x] 创建 docker-compose.yml（服务编排 + 卷挂载）
+- [x] 创建 .dockerignore（优化构建上下文）
+- [x] 创建 .env.docker.example（Docker 环境变量模板）
+- [x] 创建 /api/health 健康检查端点
+- [x] 更新 README.md（添加 Docker 部署说明）
+
+### 新增文件
+| 文件 | 说明 |
+|------|------|
+| `Dockerfile` | 多阶段构建，3 个 stage（deps → builder → runner） |
+| `docker-compose.yml` | Docker Compose 配置，含卷挂载和健康检查 |
+| `.dockerignore` | Docker 构建排除文件 |
+| `.env.docker.example` | Docker 环境变量模板 |
+| `src/app/api/health/route.ts` | 健康检查端点 |
+
+### 关键配置
+1. **standalone 输出模式** — Next.js 生成自包含的服务器包
+2. **数据持久化** — `./data:/app/data` 卷挂载保存 SQLite 数据库
+3. **健康检查** — 每 30s 检查 `/api/health`，3 次失败后重启
+4. **非 root 用户** — 使用 `nextjs:nodejs` (1001:1001) 运行
+5. **原生模块编译** — better-sqlite3 在构建阶段编译

@@ -77,8 +77,9 @@ docker run -d \
 | 进度条 | 实时显示检测进度和统计数据 | Tailwind CSS | 2026-02-28 | v0.1.0 |
 | 邮箱认证 | 注册 / 登录 / JWT Token / bcrypt 密码哈希 | jose, bcryptjs | 2026-02-28 | v0.1.0 |
 | OAuth 登录 | GitHub / LinuxDo 授权登录 | OAuth 2.0 | 2026-02-28 | v0.1.0 |
-| 配置保存 | AES-256-GCM 加密存储 API Key | Drizzle ORM | 2026-02-28 | v0.1.0 |
-| 历史记录 | 保存检测结果，支持查看 | SQLite | 2026-02-28 | v0.1.0 |
+| 配置保存 | AES-256-GCM 加密存储 API Key（密钥长度自动容错） | Drizzle ORM | 2026-02-28 | v0.1.0 |
+| 历史记录 | 保存检测结果，支持查看 | SQLite / PostgreSQL | 2026-02-28 | v0.1.0 |
+| 自动建表 | Vercel Postgres 首次启动自动创建表 | Next.js Instrumentation | 2026-02-28 | v0.1.0 |
 | URL 参数注入 | 支持 ?baseUrl=&apiKey= 快速测试 | Next.js | 2026-02-28 | v0.1.0 |
 | Markdown 导出 | 复制检测结果为 Markdown 表格 | Clipboard API | 2026-02-28 | v0.1.0 |
 | 响应式布局 | 适配桌面端和移动端 | Tailwind CSS | 2026-02-28 | v0.1.0 |
@@ -108,6 +109,7 @@ ProviderAdapter 接口
 
 - **传输安全** — 通过 Next.js API Route 代理转发，Key 不暴露在浏览器端
 - **存储安全** — 使用 AES-256-GCM 加密存储到数据库
+- **密钥长度容错** — 当 `ENCRYPTION_KEY` 不是标准 64 位 hex 字符串时，自动使用 SHA-256 hash 生成合法的 32 字节密钥，避免 "Invalid key length" 错误
 - **显示脱敏** — 界面只显示末 4 位，如 `sk-****1234`
 
 ### OAuth 授权登录
@@ -180,12 +182,13 @@ https://your-site.com?configId=123
 
 | 技术 | 版本 | 用途 | 官网 |
 |------|------|------|------|
-| Next.js | 16 | 全栈框架（App Router） | [nextjs.org](https://nextjs.org) |
+| Next.js | 16 | 全栈框架（App Router + Instrumentation） | [nextjs.org](https://nextjs.org) |
 | React | 19 | UI 渲染 | [react.dev](https://react.dev) |
 | TypeScript | 5 | 类型安全 | [typescriptlang.org](https://www.typescriptlang.org) |
 | Tailwind CSS | 4 | 样式框架 | [tailwindcss.com](https://tailwindcss.com) |
-| Drizzle ORM | 0.45 | 数据库 ORM | [orm.drizzle.team](https://orm.drizzle.team) |
-| better-sqlite3 | 12 | SQLite 驱动 | [github.com/WiseLibs/better-sqlite3](https://github.com/WiseLibs/better-sqlite3) |
+| Drizzle ORM | 0.45 | 数据库 ORM（双数据库支持） | [orm.drizzle.team](https://orm.drizzle.team) |
+| better-sqlite3 | 12 | SQLite 驱动（本地/Docker） | [github.com/WiseLibs/better-sqlite3](https://github.com/WiseLibs/better-sqlite3) |
+| pg | 8 | PostgreSQL 驱动（Vercel） | [github.com/brianc/node-postgres](https://github.com/brianc/node-postgres) |
 | jose | 6 | JWT 处理 | [github.com/panva/jose](https://github.com/panva/jose) |
 | bcryptjs | 3 | 密码哈希 | [github.com/dcodeIO/bcrypt.js](https://github.com/dcodeIO/bcrypt.js) |
 
@@ -195,7 +198,7 @@ https://your-site.com?configId=123
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           浏览器端 (React)                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐             │
-│  │  ConfigForm  │  │  ModelTable  │  │ ProgressBar  │             │
+│  │  ConfigForm  │  │  ModelTable  │  │  ProgressBar │             │
 │  └──────────────┘  └──────────────┘  └──────────────┘             │
 └─────────────────────────────────────────────────────────────────────┘
                                │ HTTP/JSON
@@ -233,8 +236,9 @@ https://your-site.com?configId=123
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    SQLite 数据库 (本地)                            │
-│  users (含 OAuth 字段) / saved_configs (AES 加密) / check_histories    │
+│                      数据库层 (Drizzle ORM)                        │
+│  SQLite (本地/Docker)  ←→  统一 Schema  ←→  PostgreSQL (Vercel)   │
+│  users / saved_configs (AES-256-GCM 加密) / check_histories       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -288,6 +292,7 @@ model-checker/
 │   │   ├── layout.tsx                   # 根布局
 │   │   ├── page.tsx                     # 主检测页面
 │   │   └── globals.css                  # 全局样式
+│   ├── instrumentation.ts               # 服务启动钩子（Vercel Postgres 自动建表）
 │   ├── components/
 │   │   ├── AuthContext.tsx              # 认证状态管理
 │   │   ├── AuthModal.tsx                # 登录/注册弹窗
@@ -308,10 +313,10 @@ model-checker/
 │   │   │   ├── linuxdo.ts               # LinuxDo OAuth 工具
 │   │   │   └── index.ts                 # 统一导出
 │   │   ├── db/
-│   │   │   ├── schema.ts                # 数据库表定义（含 OAuth 字段）
-│   │   │   └── index.ts                 # DB 连接
+│   │   │   ├── schema.ts                # 数据库表定义（统一列构建器支持双模式）
+│   │   │   └── index.ts                 # DB 连接（自动选择 SQLite 或 Postgres，移除 sslmode 参数修复 Neon SSL 问题）
 │   │   ├── auth.ts                      # JWT 工具
-│   │   └── crypto.ts                    # 加密工具
+│   │   └── crypto.ts                    # 加密工具（密钥长度自动容错）
 │   └── types/
 │       └── index.ts                     # 核心类型定义
 ├── data/
@@ -342,7 +347,7 @@ model-checker/
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/model-checker.git
+git clone https://github.com/wwwhzhouhui569/model-checker.git
 
 # 进入目录
 cd model-checker
@@ -353,7 +358,7 @@ npm install
 
 ### 配置说明
 
-项目使用 SQLite 本地数据库，无需额外配置。生产环境建议配置以下环境变量：
+项目使用 SQLite 本地数据库（Docker 部署），Vercel 部署使用 PostgreSQL。无需手动建表，应用启动时自动创建。生产环境建议配置以下环境变量：
 
 ```bash
 # .env.local
@@ -363,7 +368,8 @@ npm install
 JWT_SECRET=your-jwt-secret-key-min-64-characters-long
 
 # API Key 加密密钥（必需）
-# 生成命令: openssl rand -hex 32
+# 推荐格式：64 位 hex 字符串（openssl rand -hex 32）
+# 注意：如果不是标准 64 位 hex，会自动使用 SHA-256 hash 生成合法的 32 字节密钥
 ENCRYPTION_KEY=your-64-character-hex-string-for-aes-256-gcm-encryption
 
 # OAuth 回调地址（可选，默认使用当前域名）
@@ -559,7 +565,7 @@ docker run -d \
 
 **注意事项**：
 - 数据库文件会保存在 `./data` 目录，请确保持久化挂载
-- 首次启动会自动创建 SQLite 数据库
+- 首次启动会自动创建 SQLite 数据库（Docker 模式使用 SQLite，Vercel 模式使用 Postgres）
 - 健康检查端点：`http://localhost:3000/api/health`
 - 预构建镜像基于 `node:24-alpine`，镜像大小约 150MB
 - 镜像地址：[Docker Hub](https://hub.docker.com/r/wwwhzhouhui569/model-checker)
@@ -634,25 +640,32 @@ npx drizzle-kit studio
 <details>
 <summary>数据库文件在哪里？</summary>
 
-SQLite 数据库文件位于 `./data/app.db`，首次运行自动创建。如需重置，删除该文件即可。
+- **本地开发 / Docker 部署**：SQLite 数据库文件位于 `./data/app.db`，首次运行自动创建。如需重置，删除该文件即可。
+- **Vercel 部署**：使用 Vercel Postgres（Neon），数据库由 Vercel 托管。
+  - 表在首次启动时通过 `src/instrumentation.ts` 自动创建（使用 Next.js instrumentation hook）
+  - 检测到 `users` 表已存在时会跳过创建，避免重复初始化
+  - 移除了连接 URL 中的 `sslmode` 参数，使用 `ssl: { rejectUnauthorized: false }` 解决 Neon SSL 证书验证问题
 
 </details>
 
 <details>
 <summary>如何部署到生产环境？</summary>
 
-推荐使用 Vercel 或其他支持 Next.js 的平台：
+**Vercel 部署（推荐）**：
 
-```bash
-# Vercel 部署
-npm install -g vercel
-vercel
+项目已原生支持 Vercel + Postgres 部署，数据库表在首次启动时自动创建。
 
-# 注意：Vercel Serverless 环境不支持 better-sqlite3
-# 需改用 Vercel Postgres 或其他云数据库
-```
+1. Fork 本仓库到你的 GitHub
+2. 在 Vercel 创建新项目并关联仓库
+3. 在 Vercel 项目设置中添加 Postgres 数据库（Storage → Create Database → Postgres）
+4. 配置环境变量：`JWT_SECRET`、`ENCRYPTION_KEY`（可选：OAuth 相关变量）
+5. 部署即可
 
-传统服务器部署：
+或使用一键部署按钮：
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwwwzhouhui%2Fmodel-checker&env=JWT_SECRET,ENCRYPTION_KEY&envDescription=Required%20environment%20variables%20for%20Model%20Checker&project-name=model-checker&repository-name=model-checker)
+
+**传统服务器部署**：
 ```bash
 npm run build
 npm run start
@@ -662,29 +675,38 @@ npm run start
 
 ---
 
-## 路线图
+## 技术交流群
 
-### 计划功能
+欢迎加入技术交流群，分享你的使用心得和问题反馈：
 
-- [ ] 支持 Stream 模式检测
-- [ ] 支持自定义并发数
-- [ ] 支持按模型名称筛选/搜索
-- [ ] 支持批量检测中止功能
-- [ ] 导出为 CSV/JSON 格式
-- [ ] 检测结果对比分析
+![微信图片_20260223133201_158_292](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%25E5%25BE%25AE%25E4%25BF%25A1%25E5%259B%25BE%25E7%2589%2587_20260223133201_158_292.jpg)
 
-### 优化计划
+---
 
-- [ ] 添加亮色主题切换
-- [ ] 支持多平台对比检测
-- [ ] 优化移动端体验
-- [ ] 添加 PWA 支持
+## 作者联系
+
+- **微信**: laohaibao2025
+- **邮箱**: 75271002@qq.com
+
+![微信二维码](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Screenshot_20260123_095617_com.tencent.mm.jpg)
+
+---
+
+## 打赏
+
+如果这个项目对你有帮助，欢迎请我喝杯咖啡 ☕
+
+**微信支付**
+
+![微信支付](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20250914152855543.png)
+
+
 
 ---
 
 ## License
 
-SPDX-License-Identifier: MIT
+ MIT
 
 ---
 
@@ -692,8 +714,4 @@ SPDX-License-Identifier: MIT
 
 如果觉得项目不错，欢迎点个 Star ⭐
 
-[![Star History Chart](https://api.star-history.com/svg?repos=wwwzhouhui/model-checker&type=Date)](https://star-history.com/#wwwzhouhui/model-checker&Date)
-
----
-
-**文档生成时间**: 2026-02-28
+[![Star History Chart](https://api.star-history.com/svg?repos=wwwhzhouhui569/model-checker&type=Date)](https://star-history.com/#wwwhzhouhui569/model-checker&Date)

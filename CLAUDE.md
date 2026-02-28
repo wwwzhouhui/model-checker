@@ -1,56 +1,65 @@
 # CLAUDE.md
 
-本文件为 Claude Code (claude.ai/code) 提供在此仓库中工作的指导。
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
-## 项目概述
+## Project Overview
 
-Model Checker - 用于测试第三方代理平台（如 NewAPI）上 AI 模型可用性的 Next.js 应用。支持 OpenAI 兼容、Anthropic (Claude)、Google Gemini 厂商。
+Model Checker - A Next.js web application for testing AI model availability on third-party proxy platforms (NewAPI, OneAPI, etc.). Supports OpenAI-compatible, Anthropic (Claude), and Google Gemini providers.
 
-**技术栈**：Next.js 16 (App Router)、React 19、TypeScript、Tailwind CSS 4、Drizzle ORM + better-sqlite3、jose (JWT)
+**Tech Stack**: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Drizzle ORM + better-sqlite3 / pg (Postgres), jose (JWT)
+
+**Deployment**: Docker (standalone output), Vercel
 
 ---
 
-## 开发命令
+## Development Commands
 
 ```bash
-# 开发
-npm run dev          # 启动开发服务器 localhost:3000
+# Development
+npm run dev          # Start dev server (default port 3000)
 
-# 构建与生产
-npm run build        # 生产构建
-npm start           # 启动生产服务器
+# Build & Production
+npm run build        # Production build (standalone output for Docker)
+npm start           # Start production server
 
-# 代码检查
-npm run lint        # 运行 ESLint
+# Code Quality
+npm run lint        # Run ESLint
 
-# 数据库 (Drizzle Kit)
-npx drizzle-kit generate    # 生成迁移
-npx drizzle-kit migrate     # 执行迁移
-npx drizzle-kit studio      # 打开 Drizzle Studio
+# Database (Drizzle Kit)
+npx drizzle-kit generate    # Generate migration
+npx drizzle-kit migrate     # Run migration
+npx drizzle-kit studio      # Open Drizzle Studio
+
+# Docker
+docker-compose up -d        # Build and start containers
+docker-compose down         # Stop containers
+docker-compose logs -f      # View logs
 ```
 
-**数据库位置**：`./data/app.db`（首次运行自动创建）
+**Database Location**:
+- **Local/Docker**: `./data/app.db` (SQLite, auto-created on first run, persisted via Docker volume)
+- **Vercel**: Postgres (via `POSTGRES_URL` env var, tables auto-created by `src/instrumentation.ts`)
 
 ---
 
-## 架构设计
+## Architecture
 
-### Provider 适配器模式
+### Provider Adapter Pattern
 
-应用使用适配器模式通过统一接口支持多个 AI 厂商：
+The application uses an adapter pattern to support multiple AI providers through a unified interface:
 
 ```
 src/lib/providers/
-├── types.ts      # ProviderAdapter 接口定义
-├── openai.ts     # OpenAI 兼容（含第三方代理）
+├── types.ts      # ProviderAdapter interface
+├── openai.ts     # OpenAI-compatible (including third-party proxies)
 ├── anthropic.ts  # Anthropic Claude
 ├── gemini.ts     # Google Gemini
-└── index.ts      # getProvider() 工厂函数
+└── index.ts      # getProvider() factory
 ```
 
-**核心接口** (`src/lib/providers/types.ts`)：
+**Core Interface** (`src/lib/providers/types.ts`):
 ```typescript
 interface ProviderAdapter {
   fetchModels(baseUrl: string, apiKey: string): Promise<NormalizedModel[]>;
@@ -58,67 +67,91 @@ interface ProviderAdapter {
 }
 ```
 
-新增厂商步骤：
-1. 创建 `src/lib/providers/[provider].ts` 实现 `ProviderAdapter`
-2. 在 `src/types/index.ts` 添加：`export type Provider = "openai" | "anthropic" | "gemini" | "new-provider";`
-3. 在 `src/lib/providers/index.ts` 注册
+**Adding a New Provider**:
+1. Create `src/lib/providers/[provider].ts` implementing `ProviderAdapter`
+2. Add to `src/types/index.ts`: `export type Provider = "openai" | "anthropic" | "gemini" | "new-provider";`
+3. Register in `src/lib/providers/index.ts`
 
-### 认证与安全
+### OAuth Authentication
 
-- **JWT**：由 `src/lib/auth.ts` 处理，使用 `jose` 库
-- **Token 存储**：httpOnly cookie (`token`)，7天有效期
-- **API Key 加密**：AES-256-GCM，见 `src/lib/crypto.ts`
-  - 密钥加密存储于 DB (`apiKeyEnc` 字段)
-  - `ENCRYPTION_KEY` 环境变量（64位十六进制），开发环境默认全零
+GitHub and LinuxDo OAuth login is supported via standard OAuth 2.0 flow:
 
-### 数据库表结构 (`src/lib/db/schema.ts`)
+```
+src/lib/oauth/
+├── types.ts      # OAuth type definitions
+├── github.ts     # GitHub OAuth utilities
+├── linuxdo.ts    # LinuxDo/Discourse OAuth utilities
+└── index.ts      # Unified exports
 
-| 表 | 用途 |
-|----|------|
-| `users` | 用户账户（邮箱 + bcrypt 密码哈希） |
-| `savedConfigs` | 保存的 API 配置（加密 API Key） |
-| `checkHistories` | 检测历史记录（JSON 结果） |
+src/app/api/auth/oauth/
+├── github/route.ts       # GitHub OAuth entry (redirects to GitHub)
+├── linuxdo/route.ts      # LinuxDo OAuth entry
+└── callback/
+    ├── github/route.ts   # GitHub callback handler (creates/updates user)
+    └── linuxdo/route.ts  # LinuxDo callback handler
+```
 
-### API 路由 (`src/app/api/`)
+**OAuth Flow**:
+1. User clicks OAuth button → `/api/auth/oauth/{provider}` (sets state cookie)
+2. Redirect to provider's authorize page
+3. Provider redirects back to `/api/auth/callback/{provider}?code=xxx&state=xxx`
+4. Backend exchanges code for access token → fetches user info → creates/updates user
+5. Sets JWT cookie and redirects to home
 
-| 路由 | 方法 | 用途 |
-|------|------|------|
-| `/api/auth/register` | POST | 创建用户账户 |
-| `/api/auth/login` | POST | 登录，设置 JWT cookie |
-| `/api/auth/logout` | POST | 清除 JWT cookie |
-| `/api/auth/me` | GET | 获取当前用户 |
-| `/api/configs` | GET/POST | 列出/创建保存的配置 |
-| `/api/configs/[id]` | GET/DELETE | 获取/删除指定配置 |
-| `/api/models` | POST | 从厂商获取模型列表 |
-| `/api/test` | POST | 测试单个模型可用性 |
-| `/api/histories` | GET/POST | 列出/创建检测历史 |
-| `/api/histories/[id]` | DELETE | 删除历史记录 |
+**Important**: OAuth callback URLs are auto-detected from the request (supports any port). No manual `OAUTH_CALLBACK_URL` needed for local development.
 
----
+### Authentication & Security
 
-## 前端结构
+- **JWT**: Handled by `src/lib/auth.ts` using `jose` library
+- **Token Storage**: httpOnly cookie (`token`), 7-day expiration
+- **API Key Encryption**: AES-256-GCM, see `src/lib/crypto.ts`
+  - Encrypted keys stored in DB (`apiKeyEnc` field)
+  - `ENCRYPTION_KEY` env var (64-char hex recommended), development defaults to all-zeros
+  - **Key Length Fallback**: Non-standard length keys are automatically hashed via SHA-256 to derive a valid 32-byte key for AES-256-GCM. This prevents "Invalid key length" errors when custom keys don't meet the 64-hex-char requirement.
+- **Password Hashing**: bcryptjs for email/password registration
 
-- **App Router**：`src/app/` 使用 Next.js App Router
-- **客户端组件**：所有页面组件使用 `"use client"`
-- **样式**：Tailwind CSS 4 + CSS 变量主题（默认暗色模式）
-- **状态管理**：React Context (`src/components/AuthContext.tsx`) 处理认证
+### Database (`src/lib/db/`)
 
-### 页面
+**Dual Database Architecture**: The application supports both SQLite (local/Docker) and PostgreSQL (Vercel).
 
-| 路径 | 用途 |
-|------|------|
-| `/` | 主测试界面 |
-| `/dashboard` | 用户仪表板（保存的配置 + 历史） |
-| `/history` | 检测历史详情 |
+- **Detection**: `POSTGRES_URL` or `DATABASE_URL` env var → Postgres; otherwise → SQLite
+- **Schema** (`schema.ts`): Uses unified column builders (`t`, `int`, `createTable`, `pk`) with `any` type casts to avoid TypeScript union type incompatibility between SQLite and Postgres column types. This pattern resolves compilation errors where conditional ternary operators on column builders produce uncallable union types.
+- **Connection** (`index.ts`): `getDb()` returns a Drizzle instance (SQLite or Postgres based on env)
+  - **SSL Fix**: Removes `sslmode` parameter from connection URL to prevent `pg` library from overriding the `rejectUnauthorized: false` setting (fixes Neon SSL certificate validation errors)
+  - Returns `any` type to support dual-database compatibility
+- **Auto-migration** (`src/instrumentation.ts`): On Vercel, tables are auto-created via Next.js instrumentation hook before any request is handled. Checks if `users` table exists first to avoid re-creation
 
----
+### Database Schema (`src/lib/db/schema.ts`)
 
-## 重要模式
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `users` | User accounts | `id`, `email` (nullable), `passwordHash` (nullable), `oauthProvider`, `oauthId`, `avatarUrl`, `username` |
+| `savedConfigs` | Saved API configs | `id`, `name`, `baseUrl`, `apiKeyEnc`, `provider` |
+| `checkHistories` | Detection history | `id`, `configId`, `results` (JSON), `modelCount`, `availableCount` |
 
-### API 路由认证
+**OAuth Users**: Identified by composite key `(oauthProvider, oauthId)`. Email and passwordHash are nullable for OAuth-only users.
 
-所有受保护的 API 路由使用此模式：
+### API Routes (`src/app/api/`)
 
+| Route | Method | Purpose | Protected |
+|-------|--------|---------|-----------|
+| `/api/auth/register` | POST | Create user account | No |
+| `/api/auth/login` | POST | Login, set JWT cookie | No |
+| `/api/auth/logout` | POST | Clear JWT cookie | No |
+| `/api/auth/me` | GET | Get current user | No (returns null if not auth) |
+| `/api/auth/oauth/github` | GET | GitHub OAuth entry | No |
+| `/api/auth/oauth/linuxdo` | GET | LinuxDo OAuth entry | No |
+| `/api/auth/callback/github` | GET | GitHub OAuth callback | No |
+| `/api/auth/callback/linuxdo` | GET | LinuxDo OAuth callback | No |
+| `/api/configs` | GET/POST | List/create saved configs | Yes |
+| `/api/configs/[id]` | GET/PUT/DELETE | Get/update/delete config | Yes |
+| `/api/models` | POST | Fetch models from provider | No |
+| `/api/test` | POST | Test single model | No |
+| `/api/histories` | GET/POST | List/create detection history | Yes |
+| `/api/histories/[id]` | DELETE | Delete history record | Yes |
+| `/api/health` | GET | Health check endpoint | No |
+
+**Protecting API Routes**:
 ```typescript
 import { getUserFromRequest } from "@/lib/auth";
 
@@ -127,51 +160,142 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // ... 使用 user.userId
+  // ... use user.userId
 }
 ```
 
-### Provider 使用
+### Frontend Structure
+
+- **App Router**: `src/app/` uses Next.js App Router
+- **Client Components**: All page components use `"use client"`
+- **Styling**: Tailwind CSS 4 + CSS variables (default dark "Terminal Monitor" theme)
+- **State Management**: React Context (`src/components/AuthContext.tsx`) for authentication
+
+| Path | Purpose |
+|------|---------|
+| `/` | Main testing interface |
+| `/dashboard` | User dashboard (saved configs + history) |
+| `/history` | Detection history details |
+
+---
+
+## Important Patterns
+
+### Provider Usage
 
 ```typescript
 import { getProvider } from "@/lib/providers";
 
-const adapter = getProvider("openai");  // 或 "anthropic" | "gemini"
+const adapter = getProvider("openai");  // or "anthropic" | "gemini"
 const models = await adapter.fetchModels(baseUrl, apiKey);
 const result = await adapter.testModel(baseUrl, apiKey, modelId);
 ```
 
-### 数据库访问
+### Database Access
 
 ```typescript
 import { getDb } from "@/lib/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { users } from "@/lib/db/schema";
 
 const db = getDb();
-const user = db.select().from(users).where(eq(users.id, id)).get();
+// Single condition
+const user = await db.select().from(users).where(eq(users.id, id)).limit(1);
+// Multiple conditions (must use and())
+const user = await db.select().from(users).where(
+  and(eq(users.oauthProvider, "github"), eq(users.oauthId, oauthId))
+).limit(1);
+```
+
+**Important**:
+- Drizzle ORM does not support chained `.where()` calls. Use `and()` for multiple conditions.
+- Use `await` for all queries (Postgres is async). SQLite also works with `await` via drizzle compatibility.
+- Schema tables and `getDb()` return `any` types to support dual-database. Do not rely on type inference from query results.
+- When defining schemas, use the unified column builders (`t`, `int`, `createTable`, `pk`) from `schema.ts` instead of directly importing from drizzle-orm to avoid union type issues.
+
+### OAuth Implementation
+
+When adding a new OAuth provider:
+1. Create `src/lib/oauth/[provider].ts` with:
+   - `get[Provider]AuthorizeUrl(state)` - returns authorization URL
+   - `exchangeCodeForToken(code)` - exchanges code for access token
+   - `get[Provider]User(accessToken)` - fetches user info
+   - `normalize[Provider]User(user)` - converts to `OAuthUserInfo`
+2. Create API routes:
+   - `/api/auth/oauth/[provider]/route.ts` - entry point (sets callback URL from request)
+   - `/api/auth/callback/[provider]/route.ts` - callback handler (creates/updates user)
+3. Export functions from `src/lib/oauth/index.ts`
+
+---
+
+## URL Parameters
+
+Home page supports URL parameter injection for quick testing:
+
+- `?baseUrl=https://api.example.com&apiKey=sk-xxx&provider=openai`
+- `?configId=123` (load saved config by ID, decrypts API key)
+
+---
+
+## Docker Deployment
+
+The application uses Next.js standalone output for minimal Docker images:
+
+**Key Files**:
+- `Dockerfile` - Multi-stage build (deps → builder → runner)
+- `docker-compose.yml` - Service orchestration with volume mount
+- `.dockerignore` - Build context optimization
+
+**Configuration**:
+- Database persists in `./data` directory (volume mount)
+- Health check: `/api/health` (30s interval, 3 retries)
+- Non-root user: `nextjs:nodejs` (1001:1001)
+- `next.config.ts` has `output: "standalone"` enabled
+
+**Environment Variables** (see `.env.docker.example`):
+```bash
+JWT_SECRET=your-jwt-secret-key-min-64-characters-long
+ENCRYPTION_KEY=your-64-character-hex-string
+GITHUB_CLIENT_ID=...  # Optional, for GitHub OAuth
+GITHUB_CLIENT_SECRET=...
+LINUXDO_CLIENT_ID=...  # Optional, for LinuxDo OAuth
+LINUXDO_CLIENT_SECRET=...
+OAUTH_CALLBACK_URL=http://localhost:3000  # Optional, auto-detected from request
 ```
 
 ---
 
-## URL 参数
+## Environment Variables
 
-主页支持 URL 参数注入以便快速测试：
-
-- `?baseUrl=https://api.example.com&apiKey=sk-xxx&provider=openai`
-- `?configId=123`（按 ID 加载保存的配置，解密 API Key 使用）
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `JWT_SECRET` | JWT signing secret (64+ chars recommended) | `dev-secret-change-in-production` |
+| `ENCRYPTION_KEY` | AES-256 key (64 hex chars recommended, non-standard lengths auto-SHA256-hashed) | All zeros (dev only) |
+| `POSTGRES_URL` | PostgreSQL connection string (Vercel Postgres) | - |
+| `DATABASE_URL` | PostgreSQL connection string (fallback) | - |
+| `GITHUB_CLIENT_ID` | GitHub OAuth app client ID | - |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth app secret | - |
+| `LINUXDO_CLIENT_ID` | LinuxDo OAuth app client ID | - |
+| `LINUXDO_CLIENT_SECRET` | LinuxDo OAuth app secret | - |
+| `OAUTH_CALLBACK_URL` | OAuth callback URL override | Auto-detected from request |
+| `GITHUB_OAUTH_TIMEOUT` | GitHub OAuth request timeout (ms) | 30000 |
+| `GITHUB_OAUTH_MAX_RETRIES` | GitHub OAuth retry attempts | 3 |
 
 ---
 
-## 环境变量
+## Path Aliases
 
-| 变量 | 用途 | 默认值 |
-|------|------|--------|
-| `JWT_SECRET` | JWT 签名密钥 | `dev-secret-change-in-production` |
-| `ENCRYPTION_KEY` | AES-256 密钥（64位十六进制） | 全零 |
+- `@/*` → `./src/*` (configured in `tsconfig.json`)
 
 ---
 
-## 路径别名
+## Known Issues
 
-- `@/*` → `./src/*`（在 `tsconfig.json` 中配置）
+### GitHub OAuth Timeout in China
+
+GitHub API may timeout when accessed from mainland China. Solutions:
+- Use LinuxDo OAuth instead (recommended for China users)
+- Use VPN/proxy
+- Deploy to overseas server (Vercel, etc.)
+
+The application automatically detects timeout errors and suggests alternatives to users.

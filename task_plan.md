@@ -407,3 +407,175 @@ Phase 18 (基础设施: CSS + Layout)
   ├──> Phase 23 (History 页)
   └──> Phase 24 (打磨 & QA) ← 依赖以上所有
 ```
+
+---
+
+# V5: GitHub + LinuxDo OAuth 授权登录
+
+## 目标
+
+在现有邮箱密码登录基础上，新增 GitHub 和 LinuxDo（Linux.do 社区）第三方 OAuth 授权登录方式，提升用户体验。
+
+## OAuth 流程图
+
+```
+用户点击"GitHub登录"
+    ↓
+前端跳转 /api/auth/oauth/github
+    ↓
+重定向到 https://github.com/login/oauth/authorize
+    ↓
+用户在 GitHub 授权
+    ↓
+GitHub 回调 /api/auth/callback/github?code=xxx&state=xxx
+    ↓
+后端用 code 换取 access_token
+    ↓
+后端获取用户信息（id, login, avatar_url, email）
+    ↓
+查找/创建用户（通过 github_id 匹配）
+    ↓
+生成 JWT Token，设置 Cookie
+    ↓
+重定向回首页（已登录状态）
+```
+
+## Phase 25: 数据库 Schema 扩展
+
+- [ ] 25.1 更新 `src/lib/db/schema.ts`
+  - users 表新增字段：
+    - `oauth_provider TEXT` — OAuth 厂商 ('github' | 'linuxdo' | null)
+    - `oauth_id TEXT` — OAuth 平台用户 ID
+    - `avatar_url TEXT` — 用户头像 URL
+    - `username TEXT` — OAuth 用户名
+  - 新增联合唯一索引：`uniqueIndex('oauth_unique').on(users.oauth_provider, users.oauth_id)`
+- [ ] 25.2 生成 migration 并 push
+
+**预期产出**: 数据库支持 OAuth 用户关联
+
+## Phase 26: OAuth 工具库
+
+- [ ] 26.1 创建 `src/lib/oauth/github.ts`
+  - `getAuthorizeUrl(state: string): string` — 生成 GitHub 授权 URL
+  - `exchangeCodeForToken(code: string): Promise<GitHubTokenResponse>` — 用 code 换 token
+  - `getUserInfo(accessToken: string): Promise<GitHubUser>` — 获取用户信息
+  - `generateState(): string` — 生成随机 state（防 CSRF）
+- [ ] 26.2 创建 `src/lib/oauth/linuxdo.ts`
+  - `getAuthorizeUrl(state: string): string` — 生成 LinuxDo 授权 URL
+  - `exchangeCodeForToken(code: string): Promise<LinuxDoTokenResponse>` — 用 code 换 token
+  - `getUserInfo(accessToken: string): Promise<LinuxDoUser>` — 获取用户信息
+- [ ] 26.3 创建 `src/lib/oauth/types.ts`
+  - OAuth 统一类型定义
+  - GitHub/LinuxDo 响应类型
+
+**预期产出**: OAuth 工具函数可用
+
+## Phase 27: OAuth API 路由
+
+- [ ] 27.1 创建 `/api/auth/oauth/github`
+  - 生成 state（存储到 sessionStorage/cookie）
+  - 重定向到 GitHub 授权页面
+- [ ] 27.2 创建 `/api/auth/oauth/linuxdo`
+  - 生成 state
+  - 重定向到 LinuxDo 授权页面
+- [ ] 27.3 创建 `/api/auth/callback/github`
+  - 验证 state 参数
+  - 用 code 换取 access_token
+  - 获取用户信息
+  - 查找/创建用户（通过 github_id）
+  - 生成 JWT Token，设置 Cookie
+  - 重定向回首页
+- [ ] 27.4 创建 `/api/auth/callback/linuxdo`
+  - 同 GitHub 流程
+  - LinuxDo 特殊字段处理（external_id, username）
+
+**预期产出**: OAuth 完整流程可用
+
+## Phase 28: 前端集成
+
+- [ ] 28.1 更新 `src/components/AuthModal.tsx`
+  - 新增"GitHub 登录"按钮（GitHub 品牌色）
+  - 新增"LinuxDo 登录"按钮（LinuxDo 品牌色）
+  - 或邮箱输入框下方显示分割线"或使用第三方登录"
+  - OAuth 按钮点击时跳转到 `/api/auth/oauth/{provider}`
+- [ ] 28.2 更新 `src/components/Navbar.tsx`
+  - 用户头像显示（优先 avatar_url，fallback 首字母）
+- [ ] 28.3 更新 `src/app/dashboard/page.tsx`
+  - 显示用户 OAuth 绑定信息
+  - 显示账号来源标签（邮箱注册 / GitHub / LinuxDo）
+
+**预期产出**: 前端 OAuth 入口可见，用户头像显示
+
+## Phase 29: 环境变量与配置
+
+- [ ] 29.1 创建 `.env.local.example`
+  - `GITHUB_CLIENT_ID`
+  - `GITHUB_CLIENT_SECRET`
+  - `LINUXDO_CLIENT_ID`
+  - `LINUXDO_CLIENT_SECRET`
+  - `OAUTH_CALLBACK_URL`（可选）
+- [ ] 29.2 更新 `README.md`
+  - 新增 OAuth 配置说明
+  - 新增 GitHub/LinuxDo OAuth App 申请教程
+
+**预期产出**: 环境变量配置文档完整
+
+## Phase 30: 测试与验证
+
+- [ ] 30.1 端到端功能验证
+  - GitHub OAuth 登录流程测试
+  - LinuxDo OAuth 登录流程测试
+  - 首次登录创建用户测试
+  - 再次登录识别用户测试
+  - 邮箱注册用户与 OAuth 用户共存测试
+  - 登出功能测试
+- [ ] 30.2 边界条件测试
+  - OAuth 授权拒绝处理
+  - State 参数不匹配处理
+  - 无效 code 处理
+  - 网络超时处理
+- [ ] 30.3 构建验证 `npm run build`
+
+**预期产出**: OAuth 登录全流程可用
+
+---
+
+## V5 依赖关系
+
+```
+Phase 25 (数据库 Schema)
+  └──> Phase 26 (OAuth 工具库)
+        ├──> Phase 27 (OAuth API 路由)
+        │       └──> Phase 28 (前端集成)
+        │       └──> Phase 30 (测试)
+        └──> Phase 29 (环境变量)
+              └──> Phase 30 (测试)
+```
+
+## V5 新增关键决策
+
+| # | 决策 | 选择 | 理由 |
+|---|------|------|------|
+| D20 | OAuth 实现 | 服务端 OAuth 2.0 | Next.js API Route 支持，安全可控 |
+| D21 | state 存储 | HttpOnly Cookie | 防 CSRF，服务端验证 |
+| D22 | 用户识别 | oauth_provider + oauth_id | 联合唯一，支持多 OAuth 平台 |
+| D23 | Token 存储 | 不存储 access_token | 仅一次性用 code 换用户信息 |
+| D24 | 头像存储 | 存储 URL，定期刷新 | 节省存储，OAuth 提供头像地址 |
+
+## V5 文件变更矩阵
+
+| 文件 | Phase | 类型 | 风险 |
+|------|-------|------|------|
+| `src/lib/db/schema.ts` | 25 | 数据库 | 低 |
+| `src/lib/oauth/github.ts` | 26 | 新建 | 低 |
+| `src/lib/oauth/linuxdo.ts` | 26 | 新建 | 低 |
+| `src/lib/oauth/types.ts` | 26 | 新建 | 低 |
+| `src/app/api/auth/oauth/github/route.ts` | 27 | 新建 | 低 |
+| `src/app/api/auth/oauth/linuxdo/route.ts` | 27 | 新建 | 低 |
+| `src/app/api/auth/callback/github/route.ts` | 27 | 新建 | 中 |
+| `src/app/api/auth/callback/linuxdo/route.ts` | 27 | 新建 | 中 |
+| `src/components/AuthModal.tsx` | 28 | 修改 | 低 |
+| `src/components/Navbar.tsx` | 28 | 修改 | 低 |
+| `src/app/dashboard/page.tsx` | 28 | 修改 | 低 |
+| `.env.local.example` | 29 | 新建 | 无 |
+| `README.md` | 29 | 文档 | 无 |
