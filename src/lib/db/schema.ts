@@ -1,60 +1,110 @@
 import { sqliteTable, text, integer, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { pgTable, serial, text as pgText, integer as pgInteger, uniqueIndex as pgUniqueIndex, timestamp } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
-/** 用户表 */
-export const users = sqliteTable(
-  "users",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    email: text("email").unique(), // 邮箱注册用户必填，OAuth 用户可选
-    passwordHash: text("password_hash"), // 邮箱注册用户必填，OAuth 用户为空
-    // OAuth 相关字段
-    oauthProvider: text("oauth_provider"), // 'github' | 'linuxdo' | null
-    oauthId: text("oauth_id"), // OAuth 平台的用户 ID
-    avatarUrl: text("avatar_url"), // 用户头像 URL
-    username: text("username"), // OAuth 用户名
-    createdAt: text("created_at")
-      .notNull()
-      .default(sql`(datetime('now'))`),
-  },
-  (table) => ({
-    // OAuth 联合唯一索引：同一 OAuth 平台的同一用户只能绑定一个账号
-    oauthUnique: uniqueIndex("oauth_unique").on(table.oauthProvider, table.oauthId),
-  })
-);
+// 检测是否使用 Postgres
+const usePostgres = !!process.env.POSTGRES_URL || !!process.env.DATABASE_URL;
 
-/** 保存的检测配置 */
-export const savedConfigs = sqliteTable("saved_configs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  name: text("name").notNull(),
-  baseUrl: text("base_url").notNull(),
-  apiKeyEnc: text("api_key_enc").notNull(),
-  provider: text("provider").notNull().default("openai"),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(datetime('now'))`),
-  updatedAt: text("updated_at")
-    .notNull()
-    .default(sql`(datetime('now'))`),
+// ==================== 用户表 ====================
+const usersCore = {
+  email: (usePostgres ? pgText : text)("email").unique(),
+  passwordHash: (usePostgres ? pgText : text)("password_hash"),
+  // OAuth 相关字段
+  oauthProvider: (usePostgres ? pgText : text)("oauth_provider"),
+  oauthId: (usePostgres ? pgText : text)("oauth_id"),
+  avatarUrl: (usePostgres ? pgText : text)("avatar_url"),
+  username: (usePostgres ? pgText : text)("username"),
+  createdAt: (usePostgres
+    ? timestamp("created_at").defaultNow().notNull()
+    : (usePostgres ? pgText : text)("created_at")
+        .notNull()
+        .default(sql`(datetime('now'))`)),
+};
+
+const usersExtras = (table: any) => ({
+  oauthUnique: (usePostgres ? pgUniqueIndex : uniqueIndex)("oauth_unique").on(
+    table.oauthProvider,
+    table.oauthId
+  ),
 });
 
-/** 检测历史记录 */
-export const checkHistories = sqliteTable("check_histories", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  configId: integer("config_id").references(() => savedConfigs.id),
-  configName: text("config_name").notNull(),
-  baseUrl: text("base_url").notNull(),
-  total: integer("total").notNull(),
-  success: integer("success").notNull(),
-  failed: integer("failed").notNull(),
-  resultsJson: text("results_json").notNull(),
-  createdAt: text("created_at")
-    .notNull()
-    .default(sql`(datetime('now'))`),
-});
+export const users = usePostgres
+  ? pgTable("users", {
+      id: serial("id").primaryKey(),
+      ...usersCore,
+    }, usersExtras)
+  : sqliteTable(
+      "users",
+      {
+        id: integer("id").primaryKey({ autoIncrement: true }),
+        ...usersCore,
+      },
+      usersExtras
+    );
+
+// ==================== 保存的检测配置 ====================
+const savedConfigsCore = {
+  name: (usePostgres ? pgText : text)("name").notNull(),
+  baseUrl: (usePostgres ? pgText : text)("base_url").notNull(),
+  apiKeyEnc: (usePostgres ? pgText : text)("api_key_enc").notNull(),
+  provider: (usePostgres ? pgText : text)("provider").notNull().default("openai"),
+  createdAt: (usePostgres
+    ? timestamp("created_at").defaultNow().notNull()
+    : (usePostgres ? pgText : text)("created_at")
+        .notNull()
+        .default(sql`(datetime('now'))`)),
+  updatedAt: (usePostgres
+    ? timestamp("updated_at").defaultNow().notNull()
+    : (usePostgres ? pgText : text)("updated_at")
+        .notNull()
+        .default(sql`(datetime('now'))`)),
+};
+
+export const savedConfigs = usePostgres
+  ? pgTable("saved_configs", {
+      id: serial("id").primaryKey(),
+      userId: pgInteger("user_id")
+        .notNull()
+        .references(() => users.id),
+      ...savedConfigsCore,
+    })
+  : sqliteTable("saved_configs", {
+      id: integer("id").primaryKey({ autoIncrement: true }),
+      userId: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+      ...savedConfigsCore,
+    });
+
+// ==================== 检测历史记录 ====================
+const checkHistoriesCore = {
+  configName: (usePostgres ? pgText : text)("config_name").notNull(),
+  baseUrl: (usePostgres ? pgText : text)("base_url").notNull(),
+  total: (usePostgres ? pgInteger : integer)("total").notNull(),
+  success: (usePostgres ? pgInteger : integer)("success").notNull(),
+  failed: (usePostgres ? pgInteger : integer)("failed").notNull(),
+  resultsJson: (usePostgres ? pgText : text)("results_json").notNull(),
+  createdAt: (usePostgres
+    ? timestamp("created_at").defaultNow().notNull()
+    : (usePostgres ? pgText : text)("created_at")
+        .notNull()
+        .default(sql`(datetime('now'))`)),
+};
+
+export const checkHistories = usePostgres
+  ? pgTable("check_histories", {
+      id: serial("id").primaryKey(),
+      userId: pgInteger("user_id")
+        .notNull()
+        .references(() => users.id),
+      configId: pgInteger("config_id").references(() => savedConfigs.id),
+      ...checkHistoriesCore,
+    })
+  : sqliteTable("check_histories", {
+      id: integer("id").primaryKey({ autoIncrement: true }),
+      userId: integer("user_id")
+        .notNull()
+        .references(() => users.id),
+      configId: integer("config_id").references(() => savedConfigs.id),
+      ...checkHistoriesCore,
+    });
