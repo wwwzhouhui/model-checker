@@ -1,7 +1,10 @@
 import crypto from "crypto";
 
 const KEY_HEX = process.env.ENCRYPTION_KEY || "0".repeat(64);
-const KEY = Buffer.from(KEY_HEX, "hex");
+// 确保密钥为 32 字节（AES-256 要求），不足则 hash 补齐
+const KEY = KEY_HEX.length === 64
+  ? Buffer.from(KEY_HEX, "hex")
+  : crypto.createHash("sha256").update(KEY_HEX).digest();
 
 /**
  * AES-256-GCM 加密
