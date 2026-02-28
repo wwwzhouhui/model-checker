@@ -28,15 +28,15 @@ export async function GET(req: NextRequest) {
     : baseCondition;
 
   // 查询总数
-  const totalResult = db
+  const totalResult = await db
     .select({ value: count() })
     .from(checkHistories)
     .where(whereCondition)
-    .get();
-  const total = totalResult?.value ?? 0;
+    .limit(1);
+  const total = totalResult[0]?.value ?? 0;
 
   // 查询列表（不含 results_json）
-  const histories = db
+  const histories = await db
     .select({
       id: checkHistories.id,
       configId: checkHistories.configId,
@@ -51,8 +51,7 @@ export async function GET(req: NextRequest) {
     .where(whereCondition)
     .orderBy(desc(checkHistories.createdAt))
     .limit(limit)
-    .offset(offset)
-    .all();
+    .offset(offset);
 
   return NextResponse.json({
     histories,
@@ -88,7 +87,7 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
 
-  const result = db
+  const result = await db
     .insert(checkHistories)
     .values({
       userId: user.userId,
@@ -100,18 +99,18 @@ export async function POST(req: NextRequest) {
       failed,
       resultsJson: results_json,
     })
-    .returning()
-    .get();
+    .returning();
+  const history = result[0];
 
   return NextResponse.json({
     history: {
-      id: result.id,
-      configName: result.configName,
-      baseUrl: result.baseUrl,
-      total: result.total,
-      success: result.success,
-      failed: result.failed,
-      createdAt: result.createdAt,
+      id: history.id,
+      configName: history.configName,
+      baseUrl: history.baseUrl,
+      total: history.total,
+      success: history.success,
+      failed: history.failed,
+      createdAt: history.createdAt,
     },
   });
 }

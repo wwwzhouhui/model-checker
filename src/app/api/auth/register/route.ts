@@ -27,7 +27,8 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   // 检查邮箱是否已注册
-  const existing = db.select().from(users).where(eq(users.email, email)).get();
+  const existingUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const existing = existingUsers[0];
   if (existing) {
     // 如果是 OAuth 用户（没有密码），提示使用 OAuth 登录
     if (!existing.passwordHash) {
@@ -41,17 +42,17 @@ export async function POST(req: NextRequest) {
 
   // 创建用户
   const passwordHash = await hash(password, 10);
-  const result = db
+  const result = await db
     .insert(users)
     .values({ email, passwordHash })
-    .returning()
-    .get();
+    .returning();
+  const user = result[0];
 
   // 签发 JWT
   // 邮箱注册用户必定有 email，使用非空断言
-  const token = await signToken(result.id, result.email!);
+  const token = await signToken(user.id, user.email!);
   const res = NextResponse.json({
-    user: { id: result.id, email: result.email! },
+    user: { id: user.id, email: user.email! },
   });
   res.cookies.set(createTokenCookie(token));
   return res;

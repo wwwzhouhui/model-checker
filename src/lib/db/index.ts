@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { Pool } from "pg";
 
 let _db: ReturnType<typeof drizzle> | ReturnType<typeof drizzlePg> | null = null;
+let _pool: Pool | null = null;
 
 /**
  * 检测是否在 Vercel 环境
@@ -22,11 +23,11 @@ export function getDb() {
 
   // Vercel 环境使用 Postgres
   if (isVercelEnv()) {
-    const pool = new Pool({
+    _pool = new Pool({
       connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
     });
 
-    _db = drizzlePg(pool, { schema });
+    _db = drizzlePg(_pool, { schema });
     return _db;
   }
 
@@ -46,4 +47,15 @@ export function getDb() {
 
   _db = drizzle(sqlite, { schema });
   return _db;
+}
+
+/**
+ * 关闭数据库连接（用于测试或清理）
+ */
+export async function closeDb() {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+  }
+  _db = null;
 }

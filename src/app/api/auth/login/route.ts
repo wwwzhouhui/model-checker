@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
 
   const db = getDb();
 
-  const user = db.select().from(users).where(eq(users.email, email)).get();
+  const usersResult = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const user = usersResult[0];
   if (!user) {
     return NextResponse.json({ error: "邮箱或密码错误" }, { status: 401 });
   }

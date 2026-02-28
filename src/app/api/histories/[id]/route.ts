@@ -22,11 +22,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
   const db = getDb();
 
-  const history = db
+  const historyRows = await db
     .select()
     .from(checkHistories)
     .where(eq(checkHistories.id, historyId))
-    .get();
+    .limit(1);
+  const history = historyRows[0];
 
   if (!history) {
     return NextResponse.json({ error: "历史记录不存在" }, { status: 404 });
@@ -53,11 +54,12 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
   const db = getDb();
 
-  const history = db
+  const historyRows = await db
     .select()
     .from(checkHistories)
     .where(eq(checkHistories.id, historyId))
-    .get();
+    .limit(1);
+  const history = historyRows[0];
 
   if (!history) {
     return NextResponse.json({ error: "历史记录不存在" }, { status: 404 });
@@ -67,9 +69,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "无权删除此记录" }, { status: 403 });
   }
 
-  db.delete(checkHistories)
-    .where(and(eq(checkHistories.id, historyId), eq(checkHistories.userId, user.userId)))
-    .run();
+  await db.delete(checkHistories)
+    .where(and(eq(checkHistories.id, historyId), eq(checkHistories.userId, user.userId)));
 
   return NextResponse.json({ success: true });
 }

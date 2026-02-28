@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
     // 查找或创建用户
     const db = getDb();
-    let user = db
+    const existingUsers = await db
       .select()
       .from(users)
       .where(
@@ -69,11 +69,13 @@ export async function GET(req: NextRequest) {
           eq(users.oauthId, oauthUser.oauthId)
         )
       )
-      .get();
+      .limit(1);
+
+    let user = existingUsers[0];
 
     if (!user) {
       // 首次登录，创建新用户
-      const result = db
+      const result = await db
         .insert(users)
         .values({
           email: oauthUser.email,
@@ -83,21 +85,19 @@ export async function GET(req: NextRequest) {
           avatarUrl: oauthUser.avatarUrl,
           username: oauthUser.username,
         })
-        .returning()
-        .get();
-      user = result;
+        .returning();
+      user = result[0];
     } else {
       // 已存在用户，更新信息
-      const updated = db
+      const updated = await db
         .update(users)
         .set({
           avatarUrl: oauthUser.avatarUrl,
           username: oauthUser.username,
         })
         .where(eq(users.id, user.id))
-        .returning()
-        .get();
-      user = updated;
+        .returning();
+      user = updated[0];
     }
 
     // 生成 JWT Token

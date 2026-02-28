@@ -13,11 +13,10 @@ export async function GET() {
   }
 
   const db = getDb();
-  const rows = db
+  const rows = await db
     .select()
     .from(savedConfigs)
-    .where(eq(savedConfigs.userId, user.userId))
-    .all();
+    .where(eq(savedConfigs.userId, user.userId));
 
   const configs = rows.map((row) => ({
     id: row.id,
@@ -57,7 +56,7 @@ export async function POST(req: NextRequest) {
   const db = getDb();
   const apiKeyEnc = encryptApiKey(api_key);
 
-  const result = db
+  const result = await db
     .insert(savedConfigs)
     .values({
       userId: user.userId,
@@ -66,19 +65,19 @@ export async function POST(req: NextRequest) {
       apiKeyEnc,
       provider: provider ?? "openai",
     })
-    .returning()
-    .get();
+    .returning();
+  const config = result[0];
 
   return NextResponse.json(
     {
       config: {
-        id: result.id,
-        name: result.name,
-        base_url: result.baseUrl,
+        id: config.id,
+        name: config.name,
+        base_url: config.baseUrl,
         api_key_masked: maskApiKey(api_key),
-        provider: result.provider ?? "openai",
-        created_at: result.createdAt,
-        updated_at: result.updatedAt,
+        provider: config.provider ?? "openai",
+        created_at: config.createdAt,
+        updated_at: config.updatedAt,
       },
     },
     { status: 201 }

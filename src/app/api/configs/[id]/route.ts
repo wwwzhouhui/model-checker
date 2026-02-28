@@ -24,11 +24,12 @@ export async function GET(
   }
 
   const db = getDb();
-  const row = db
+  const rows = await db
     .select()
     .from(savedConfigs)
     .where(eq(savedConfigs.id, configId))
-    .get();
+    .limit(1);
+  const row = rows[0];
 
   if (!row) {
     return NextResponse.json({ error: "配置不存在" }, { status: 404 });
@@ -82,11 +83,12 @@ export async function PUT(req: NextRequest, context: RouteContext) {
   const db = getDb();
 
   // 查找记录并验证归属
-  const existing = db
+  const existingRows = await db
     .select()
     .from(savedConfigs)
     .where(eq(savedConfigs.id, configId))
-    .get();
+    .limit(1);
+  const existing = existingRows[0];
 
   if (!existing) {
     return NextResponse.json({ error: "配置不存在" }, { status: 404 });
@@ -112,24 +114,24 @@ export async function PUT(req: NextRequest, context: RouteContext) {
   if (api_key) updateValues.apiKeyEnc = encryptApiKey(api_key);
   if (provider) updateValues.provider = provider;
 
-  const result = db
+  const result = await db
     .update(savedConfigs)
     .set(updateValues)
     .where(and(eq(savedConfigs.id, configId), eq(savedConfigs.userId, user.userId)))
-    .returning()
-    .get();
+    .returning();
+  const updated = result[0];
 
-  const plainKey = api_key ?? decryptApiKey(result.apiKeyEnc);
+  const plainKey = api_key ?? decryptApiKey(updated.apiKeyEnc);
 
   return NextResponse.json({
     config: {
-      id: result.id,
-      name: result.name,
-      base_url: result.baseUrl,
+      id: updated.id,
+      name: updated.name,
+      base_url: updated.baseUrl,
       api_key_masked: maskApiKey(plainKey),
-      provider: result.provider ?? "openai",
-      created_at: result.createdAt,
-      updated_at: result.updatedAt,
+      provider: updated.provider ?? "openai",
+      created_at: updated.createdAt,
+      updated_at: updated.updatedAt,
     },
   });
 }
@@ -150,11 +152,12 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   const db = getDb();
 
   // 查找记录并验证归属
-  const existing = db
+  const existingRows = await db
     .select()
     .from(savedConfigs)
     .where(eq(savedConfigs.id, configId))
-    .get();
+    .limit(1);
+  const existing = existingRows[0];
 
   if (!existing) {
     return NextResponse.json({ error: "配置不存在" }, { status: 404 });
@@ -164,9 +167,8 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "无权操作此配置" }, { status: 403 });
   }
 
-  db.delete(savedConfigs)
-    .where(and(eq(savedConfigs.id, configId), eq(savedConfigs.userId, user.userId)))
-    .run();
+  await db.delete(savedConfigs)
+    .where(and(eq(savedConfigs.id, configId), eq(savedConfigs.userId, user.userId)));
 
   return NextResponse.json({ success: true });
 }

@@ -12,7 +12,8 @@ export async function GET() {
 
   // 从数据库获取完整用户信息
   const db = getDb();
-  const userRecord = db.select().from(users).where(eq(users.id, userReq.userId)).get();
+  const usersResult = await db.select().from(users).where(eq(users.id, userReq.userId)).limit(1);
+  const userRecord = usersResult[0];
 
   if (!userRecord) {
     return NextResponse.json({ user: null });
