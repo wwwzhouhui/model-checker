@@ -24,8 +24,12 @@ export function getDb() {
 
   // Vercel 环境使用 Postgres
   if (isVercelEnv()) {
+    // 移除连接字符串中的 sslmode 参数，避免 pg 自动验证证书覆盖代码配置
+    const rawUrl = process.env.POSTGRES_URL || process.env.DATABASE_URL || "";
+    const url = new URL(rawUrl);
+    url.searchParams.delete("sslmode");
     _pool = new Pool({
-      connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
+      connectionString: url.toString(),
       ssl: { rejectUnauthorized: false },
     });
 
