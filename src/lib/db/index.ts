@@ -5,7 +5,8 @@ import path from "path";
 import Database from "better-sqlite3";
 import { Pool } from "pg";
 
-let _db: ReturnType<typeof drizzle> | ReturnType<typeof drizzlePg> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _db: any = null;
 let _pool: Pool | null = null;
 
 /**

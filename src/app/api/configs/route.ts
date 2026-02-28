@@ -18,7 +18,8 @@ export async function GET() {
     .from(savedConfigs)
     .where(eq(savedConfigs.userId, user.userId));
 
-  const configs = rows.map((row) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const configs = rows.map((row: any) => ({
     id: row.id,
     name: row.name,
     base_url: row.baseUrl,

@@ -5,106 +5,82 @@ import { sql } from "drizzle-orm";
 // 检测是否使用 Postgres
 const usePostgres = !!process.env.POSTGRES_URL || !!process.env.DATABASE_URL;
 
-// ==================== 用户表 ====================
-const usersCore = {
-  email: (usePostgres ? pgText : text)("email").unique(),
-  passwordHash: (usePostgres ? pgText : text)("password_hash"),
-  // OAuth 相关字段
-  oauthProvider: (usePostgres ? pgText : text)("oauth_provider"),
-  oauthId: (usePostgres ? pgText : text)("oauth_id"),
-  avatarUrl: (usePostgres ? pgText : text)("avatar_url"),
-  username: (usePostgres ? pgText : text)("username"),
-  createdAt: (usePostgres
+// 统一列构建器（绕过 TypeScript 联合类型不可调用问题）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const t = (usePostgres ? pgText : text) as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const int = (usePostgres ? pgInteger : integer) as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const uIdx = (usePostgres ? pgUniqueIndex : uniqueIndex) as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const createTable = (usePostgres ? pgTable : sqliteTable) as any;
+
+// 主键列
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const pk = usePostgres ? () => serial("id").primaryKey() : () => integer("id").primaryKey({ autoIncrement: true }) as any;
+
+// 时间戳列
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createdAtCol(): any {
+  return usePostgres
     ? timestamp("created_at").defaultNow().notNull()
-    : (usePostgres ? pgText : text)("created_at")
-        .notNull()
-        .default(sql`(datetime('now'))`)),
-};
+    : t("created_at").notNull().default(sql`(datetime('now'))`);
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function updatedAtCol(): any {
+  return usePostgres
+    ? timestamp("updated_at").defaultNow().notNull()
+    : t("updated_at").notNull().default(sql`(datetime('now'))`);
+}
 
-const usersExtras = (table: any) => ({
-  oauthUnique: (usePostgres ? pgUniqueIndex : uniqueIndex)("oauth_unique").on(
-    table.oauthProvider,
-    table.oauthId
-  ),
-});
-
-export const users = usePostgres
-  ? pgTable("users", {
-      id: serial("id").primaryKey(),
-      ...usersCore,
-    }, usersExtras)
-  : sqliteTable(
-      "users",
-      {
-        id: integer("id").primaryKey({ autoIncrement: true }),
-        ...usersCore,
-      },
-      usersExtras
-    );
+// ==================== 用户表 ====================
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const users: any = createTable(
+  "users",
+  {
+    id: pk(),
+    email: t("email").unique(),
+    passwordHash: t("password_hash"),
+    oauthProvider: t("oauth_provider"),
+    oauthId: t("oauth_id"),
+    avatarUrl: t("avatar_url"),
+    username: t("username"),
+    createdAt: createdAtCol(),
+  },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (table: any) => ({
+    oauthUnique: uIdx("oauth_unique").on(table.oauthProvider, table.oauthId),
+  })
+);
 
 // ==================== 保存的检测配置 ====================
-const savedConfigsCore = {
-  name: (usePostgres ? pgText : text)("name").notNull(),
-  baseUrl: (usePostgres ? pgText : text)("base_url").notNull(),
-  apiKeyEnc: (usePostgres ? pgText : text)("api_key_enc").notNull(),
-  provider: (usePostgres ? pgText : text)("provider").notNull().default("openai"),
-  createdAt: (usePostgres
-    ? timestamp("created_at").defaultNow().notNull()
-    : (usePostgres ? pgText : text)("created_at")
-        .notNull()
-        .default(sql`(datetime('now'))`)),
-  updatedAt: (usePostgres
-    ? timestamp("updated_at").defaultNow().notNull()
-    : (usePostgres ? pgText : text)("updated_at")
-        .notNull()
-        .default(sql`(datetime('now'))`)),
-};
-
-export const savedConfigs = usePostgres
-  ? pgTable("saved_configs", {
-      id: serial("id").primaryKey(),
-      userId: pgInteger("user_id")
-        .notNull()
-        .references(() => users.id),
-      ...savedConfigsCore,
-    })
-  : sqliteTable("saved_configs", {
-      id: integer("id").primaryKey({ autoIncrement: true }),
-      userId: integer("user_id")
-        .notNull()
-        .references(() => users.id),
-      ...savedConfigsCore,
-    });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const savedConfigs: any = createTable("saved_configs", {
+  id: pk(),
+  userId: int("user_id")
+    .notNull()
+    .references(() => users.id),
+  name: t("name").notNull(),
+  baseUrl: t("base_url").notNull(),
+  apiKeyEnc: t("api_key_enc").notNull(),
+  provider: t("provider").notNull().default("openai"),
+  createdAt: createdAtCol(),
+  updatedAt: updatedAtCol(),
+});
 
 // ==================== 检测历史记录 ====================
-const checkHistoriesCore = {
-  configName: (usePostgres ? pgText : text)("config_name").notNull(),
-  baseUrl: (usePostgres ? pgText : text)("base_url").notNull(),
-  total: (usePostgres ? pgInteger : integer)("total").notNull(),
-  success: (usePostgres ? pgInteger : integer)("success").notNull(),
-  failed: (usePostgres ? pgInteger : integer)("failed").notNull(),
-  resultsJson: (usePostgres ? pgText : text)("results_json").notNull(),
-  createdAt: (usePostgres
-    ? timestamp("created_at").defaultNow().notNull()
-    : (usePostgres ? pgText : text)("created_at")
-        .notNull()
-        .default(sql`(datetime('now'))`)),
-};
-
-export const checkHistories = usePostgres
-  ? pgTable("check_histories", {
-      id: serial("id").primaryKey(),
-      userId: pgInteger("user_id")
-        .notNull()
-        .references(() => users.id),
-      configId: pgInteger("config_id").references(() => savedConfigs.id),
-      ...checkHistoriesCore,
-    })
-  : sqliteTable("check_histories", {
-      id: integer("id").primaryKey({ autoIncrement: true }),
-      userId: integer("user_id")
-        .notNull()
-        .references(() => users.id),
-      configId: integer("config_id").references(() => savedConfigs.id),
-      ...checkHistoriesCore,
-    });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const checkHistories: any = createTable("check_histories", {
+  id: pk(),
+  userId: int("user_id")
+    .notNull()
+    .references(() => users.id),
+  configId: int("config_id").references(() => savedConfigs.id),
+  configName: t("config_name").notNull(),
+  baseUrl: t("base_url").notNull(),
+  total: int("total").notNull(),
+  success: int("success").notNull(),
+  failed: int("failed").notNull(),
+  resultsJson: t("results_json").notNull(),
+  createdAt: createdAtCol(),
+});
