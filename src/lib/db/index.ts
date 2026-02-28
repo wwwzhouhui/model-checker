@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { drizzle as drizzlePg } from "drizzle-orm/node-postgres/pg";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 import path from "path";
 import Database from "better-sqlite3";
