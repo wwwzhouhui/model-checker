@@ -26,6 +26,7 @@ export function getDb() {
   if (isVercelEnv()) {
     _pool = new Pool({
       connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
     });
 
     _db = drizzlePg(_pool, { schema });
