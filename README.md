@@ -216,7 +216,7 @@ https://your-site.com?configId=123
                 ┌──────────────┴──────────────┐
                 ▼                              ▼
         ┌──────────────┐              ┌──────────────┐
-        │ Provider层   │              │  OAuth层     │
+        │ Provider 层   │              │  OAuth 层     │
         │ (多厂商适配)  │              │ (第三方登录)  │
         └──────────────┘              └──────────────┘
                 │                              │
@@ -313,7 +313,7 @@ model-checker/
 │   │   │   ├── linuxdo.ts               # LinuxDo OAuth 工具
 │   │   │   └── index.ts                 # 统一导出
 │   │   ├── db/
-│   │   │   ├── schema.ts                # 数据库表定义（统一列构建器支持双模式）
+│   │   │   ├── schema.ts                # 数据库表定义（统一列构建器支持双数据库）
 │   │   │   └── index.ts                 # DB 连接（自动选择 SQLite 或 Postgres，移除 sslmode 参数修复 Neon SSL 问题）
 │   │   ├── auth.ts                      # JWT 工具
 │   │   └── crypto.ts                    # 加密工具（密钥长度自动容错）
@@ -364,7 +364,7 @@ npm install
 # .env.local
 
 # JWT 密钥（必需）
-# 生成命令: openssl rand -base64 64
+# 生成命令：openssl rand -base64 64
 JWT_SECRET=your-jwt-secret-key-min-64-characters-long
 
 # API Key 加密密钥（必需）
@@ -377,12 +377,12 @@ ENCRYPTION_KEY=your-64-character-hex-string-for-aes-256-gcm-encryption
 OAUTH_CALLBACK_URL=https://your-domain.com
 
 # GitHub OAuth（可选，启用 GitHub 登录需要）
-# 申请地址: https://github.com/settings/developers
+# 申请地址：https://github.com/settings/developers
 GITHUB_CLIENT_ID=your_github_client_id
 GITHUB_CLIENT_SECRET=your_github_client_secret
 
 # LinuxDo OAuth（可选，启用 LinuxDo 登录需要）
-# 申请地址: https://connect.linux.do/settings/applications
+# 申请地址：https://connect.linuxdo/settings/applications
 LINUXDO_CLIENT_ID=your_linuxdo_client_id
 LINUXDO_CLIENT_SECRET=your_linuxdo_client_secret
 ```
@@ -409,7 +409,7 @@ openssl rand -hex 32
 
 #### LinuxDo OAuth 申请步骤
 
-1. 访问 [LinuxDo User Settings](https://connect.linux.do/settings/applications)
+1. 访问 [LinuxDo User Settings](https://connect.linuxdo/settings/applications)
 2. 点击「New App」
 3. 填写应用信息：
    - Application Name: `Model Checker`（或自定义名称）
@@ -679,7 +679,7 @@ npm run start
 
 欢迎加入技术交流群，分享你的使用心得和问题反馈：
 
-![微信图片_20260223133201_158_292](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260303214419_166_292.jpg)
+![微信图片_20260310230630_169_292](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E5%BE%AE%E4%BF%A1%E5%9B%BE%E7%89%87_20260310230630_169_292.jpg)
 
 ---
 
